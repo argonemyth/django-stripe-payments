@@ -1,0 +1,107 @@
+{% extends "payments/base.html" %}
+{% load i18n %}
+
+{% block main %}
+    {# The page that confirms a credit purchase #}
+    {# <h2>{% trans "You just selected" %} {{ plan.name }}</h2> #}
+    <div class="row">
+        <div class="span12">
+          {% if payment_result %}
+            <p>{{ payment_result}}</p>
+          {% else %}
+          <div id="bundle_purchase">
+            <p class="lead">Are you sure you are going to purchase <strong>{{ bundle.name }}</strong>?</p>
+            {% if request.user.customer.card_kind and request.user.customer.card_last_4 %}
+                <a id="pay_existing" class="btn btn-primary ajax" data-replace="#bundle_purchase" href="{% url 'payments_ajax_purchase_credits' bundle.slug %}">Pay with existing card</a>
+            {% else %}
+                <h3>{% trans "Please info your credit card info:" %}</h3>
+                <form class="form-horizontal" action="{% url 'payments_credit_purchase' bundle.slug %}" method="POST" id="payment-form">
+                    {% csrf_token %}
+                    <span class="payment-errors"></span>
+
+                    <div class="control-group">
+                      <label class="control-label">Card Number</label>
+                      <div class="controls">
+                        <input type="text" size="20" data-stripe="number"/>
+                      </div>
+                    </div>
+
+                    <div class="control-group">
+                      <label class="control-label">
+                        <span>CVC</span>
+                      </label>
+                      <div class="controls">
+                        <input type="text" size="4" data-stripe="cvc"/>
+                      </div>
+                    </div>
+
+                    <div class="control-group">
+                      <label class="control-label">
+                        <span>Expiration (MM/YYYY)</span>
+                      </label>
+                      <div class="controls">
+                        <input type="text" size="2" data-stripe="exp-month"/>
+                        <span> / </span>
+                        <input type="text" size="4" data-stripe="exp-year"/>
+                      </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Submit Payment</button>
+                </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    <script type="text/javascript" src="https://js.stripe.com/v2/"></script>
+    <script type="text/javascript">
+        // Stop the button being clicked again for pay with existing card
+        $("#pay_existing").one("click", function(e) {
+            console.log("Disabling link...");
+            $("#pay_existing").html("Processing payment...").attr('disabled', true);
+            $(this).on("click", function(ev){
+                ev.preventDefault();
+            });
+        });
+
+        // This identifies your website in the createToken call below
+        Stripe.setPublishableKey('{{ STRIPE_PUBLIC_KEY }}');
+
+        var stripeResponseHandler = function(status, response) {
+          var $form = $('#payment-form');
+
+          if (response.error) {
+            // Show the errors on the form
+            $form.find('.payment-errors').text(response.error.message);
+            $form.find('button').prop('disabled', false);
+          } else {
+            // token contains id, last4, and card type
+            var token = response.id;
+            // Insert the token into the form so it gets submitted to the server
+            $form.append($('<input type="hidden" name="stripe_token" />').val(token));
+            //$form.append($('<input type="hidden" name="bundle" />').val('{{ bundle.slug }}'));
+            // And submit -> no ajax this time.
+            $form.get(0).submit();
+          }
+        };
+
+        jQuery(function($) {
+          $('#payment-form').submit(function(event) {
+            event.preventDefault();
+            console.log('stripe form submit');
+            var $form = $(this);
+
+            // Disable the submit button to prevent repeated clicks
+            $form.find('button').prop('disabled', true);
+
+            Stripe.card.createToken($form, stripeResponseHandler);
+
+            // Prevent the form from submitting with the default action
+            return false;
+          });
+        });
+    </script>
+{% endblock extra_js %}

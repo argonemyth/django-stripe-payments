@@ -1,8 +1,34 @@
+
 {% extends "payments/base.html" %}
+
+{% load bootstrap_tags i18n %}
 
 {% block title %}Change Subscription{% endblock title %}
 
-{% block body %}
+{% block main %}
+    <div id="payment">
     {% include "payments/_subscription_status.html" %}
-    {% include "payments/_change_plan_form.html" %}
+    {# {% include "payments/_change_plan_form.html" %} #}
+    {% if plan.name != 'free' %}
+        {# Using Stripe's prorate subscription model #}
+        {% with request.user.customer.current_subscription as subscription %}
+            {% if plan.price > subscription.amount %}
+                <p>Thanks for upgrading to {{ plan.name }}, after clicking yes, I will be upgrade to the new plan immediately, we will bill you the prorate subscription charge the next month, do you want to continue?<p>
+                {# formular to calculate the prorate sub charge: (new_plan - old_plan)*(days_since_switch/days_in_last_month) #}
+                <div class="actions">
+                    <a class="btn primary ajax" href="{% url 'payments_ajax_change_plan' plan.stripe_plan_id %}" data-replace="#payment">{% trans "Upgrade" %}</a>
+                    <a class="btn">{% trans "Go back" %}</a>
+                </div>
+            {% else %}
+                <p>Are yo sure you want to change the plan to {{ plan.name }}? We will give you credits for the remining time for this month in the next billing cycle?<p>
+                <div class="actions">
+                    <a class="btn primary ajax" href="{% url 'payments_ajax_change_plan' plan.stripe_plan_id %}" data-replace="#payment">{% trans "Downgrade" %}</a>
+                    <a class="btn">{% trans "Go back" %}</a>
+                </div>
+            {% endif %}
+        {% endwith %}
+    {% else %}
+        {% include "payments/_free_plan_form.html" %}
+    {% endif %}
+    </div>
 {% endblock %}

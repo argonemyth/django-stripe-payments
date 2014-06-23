@@ -1,0 +1,20 @@
+{% load url from future %}
+
+<div class="cancel-subscription">
+    <h2>Cancel Subscription</h2>
+    <p class="lead">Are you sure that you want to downgrade to the free plan?</p>
+
+    {% if request.user.customer.current_subscription.status == 'canceled' %}
+        <div class="alert alert-danger">Your subscription has been downgraded to free plan. But you can still enjoy your {{ request.user.customer.current_subscription.plan }} until <strong>{{ request.user.customer.current_subscription.current_period_end }}.</strong></div>
+    {% else %}
+        {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        <form class="form ajax" data-replace-closest=".cancel-subscription" action="{% url 'payments_ajax_cancel' %}" method="POST">
+            {% csrf_token %}
+            <div class="actions">
+                <button type="submit" class="btn btn-mini btn-danger">Downgrade to Free Plan</button>
+            </div>
+        </form>
+    {% endif %}
+</div>

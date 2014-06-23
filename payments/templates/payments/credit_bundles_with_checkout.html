@@ -1,0 +1,73 @@
+{% extends "payments/base.html" %}
+{% load bootstrap_tags i18n %}
+
+{% block body_id %}shop{% endblock %}
+
+{# {% block title %}Purchase Credits{% endblock title %} #}
+
+{% block main %}
+    <h2>You have {{ </h2>
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    <div class="row">
+    {% for bundle in bundles  %}
+        <div class="span4"> 
+            <div class="panel">
+                <div class="body panel-padding">
+                    {{ bundle.name }}
+                    <form action="{% url 'payments_ajax_charge' bundle.slug %}" method="POST">
+                      {% csrf_token %}
+                      <script
+                        src="https://checkout.stripe.com/checkout.js" class="stripe-button"
+                        data-key="{{ STRIPE_PUBLIC_KEY }}"
+                        data-image="/square-image.png"
+                        data-name="{{ bundle.name }}"
+                        data-description="{{ bundle.name }} ({{ bundle.get_currency_display }}{{ bundle.price }})"
+                        data-amount="{{ bundle.get_amount }}">
+                      </script>
+                    </form>
+                    {% comment %}
+                    <form action="#" class="form ajax"  data-stripe-key="{{ STRIPE_PUBLIC_KEY }}" data-replace-closest=".subscribe-form" method="POST">
+                        {% csrf_token %}
+                        {{ form|as_bootstrap }}
+                        <input name="stripe_token" type="hidden" />
+                        <div class="form-actions">
+                            <button type="submit" class="purchase-button">Purchase</button> 
+                        </div>
+                    </form>
+                    {% endcomment %}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+{% endblock %}
+
+{% comment %}
+    
+{% block extra_js %}
+<script src="//checkout.stripe.com/v2/checkout.js"></script>
+<script>
+    $(function() {
+        $('.purchase-button').on("click", function(e) {
+          e.preventDefault();
+          var $form = $(this).closest("form"),
+              token = function(res) {
+                $form.find("input[name=stripe_token]").val(res.id);
+                $form.trigger("submit");
+              };
+
+          StripeCheckout.open({
+            key:         $form.data("stripe-key"),
+            name:        'Payment Method',
+            panelLabel:  'Add Payment Method',
+            token:       token
+          });
+
+          return false;
+        });
+    });
+</script>
+{% endblock %}
+{% endcomment %}

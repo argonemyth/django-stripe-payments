@@ -2,16 +2,23 @@
 
 <div id="card-info" class="row">
   <div class="span12">
+    {% if  message %}
+      {{ message }}
+    {% else %} 
+      {% if  error %}
+        {{ error }}
+      {% endif %}
+    <h2>{% trans "You just selected" %} {{ plan.name }}</h2>
     {% if request.user.customer.card_kind and request.user.customer.card_last_4 %}
         <p>Current card on file is a <strong>{{ request.user.customer.card_kind }}</strong>
         ending in the digits <strong>{{ request.user.customer.card_last_4 }}</strong>.</p>
         <div class="actions">
-          <a class="btn primary ajax" href="{% url 'payments_ajax_change_plan' plan.stripe_plan_id %}" data-replace="#payment">{% trans "Pay with existing card" %}</a>
+          <a class="btn primary">{% trans "Pay with existing card" %}</a>
           <a class="btn">{% trans "Change card" %}</a>
         </div>
     {% else %}
       <h3>{% trans "Please info your credit card info:" %}</h3>
-      <form class="form-horizontal ajax" action="{% url 'payments_ajax_subscribe_plan' %}" method="POST" id="payment-form" data-replace="#payment">
+      <form class="form-horizontal" action="{% url 'payments_pay_subscribe' %}" method="POST" id="payment-form">
         {% csrf_token %}
         <span class="payment-errors"></span>
 
@@ -44,26 +51,18 @@
 
         <button type="submit" class="btn btn-primary">Submit Payment</button>
       </form>
-    {% endif %}
-  </div>
-
-{% comment %}
-<div class="change-subscription">
-    <h2>Change Subscription</h2>
-    <p class="lead">
-        {% if request.user.customer.current_subscription.plan %}
-            You currently have the <strong>{{ request.user.customer.current_subscription.plan_display }}</strong> plan.
-        {% else %}
-            You currently do not have a plan.
-        {% endif %}
-    </p>
-    {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
-    <form action="{% url 'payments_ajax_change_plan' %}" method="POST" class="form-inline ajax" data-replace-closest=".change-subscription">
+      {% comment %}
+        
+      <form id="payment-form" class="form-horizontal" action="{{request.path}}" method="post">
+        <span class="payment-errors"></span>
         {% csrf_token %}
         {{ form|as_bootstrap }}
-        <button type="submit" class="btn btn-primary">Change</button>
-    </form>
+        <div>
+            <button type="submit" class="btn btn-primary">{% trans "Submit Payment" %}</button>
+        </div>
+      </form>
+      {% endcomment %}
+    {% endif %}
+    {% endif %}
+  </div>
 </div>
-{% endcomment %}

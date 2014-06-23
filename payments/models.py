@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import datetime
 import decimal
 import json
@@ -8,22 +10,23 @@ from django.core.mail import EmailMessage
 from django.db import models
 from django.utils import timezone
 from django.template.loader import render_to_string
-
+from django.utils.translation import ugettext as _
 from django.contrib.sites.models import Site
 
 import stripe
 
 from jsonfield.fields import JSONField
+from uuslug import uuslug
 
 from .managers import CustomerManager, ChargeManager, TransferManager
 from .settings import (
     DEFAULT_PLAN,
     INVOICE_FROM_EMAIL,
     PAYMENTS_PLANS,
-    plan_from_stripe_id,
     SEND_EMAIL_RECEIPTS,
     TRIAL_PERIOD_FOR_USER_CALLBACK,
     PLAN_QUANTITY_CALLBACK
+    #plan_from_stripe_id,
 )
 from .signals import (
     cancelled,
@@ -491,7 +494,7 @@ class Customer(StripeObject):
         else:
             try:
                 sub_obj = self.current_subscription
-                sub_obj.plan = plan_from_stripe_id(sub.plan.id)
+                sub_obj.plan = Plan.plan_from_stripe_id(sub.plan.id)
                 sub_obj.current_period_start = convert_tstamp(
                     sub.current_period_start
                 )
@@ -507,7 +510,7 @@ class Customer(StripeObject):
             except CurrentSubscription.DoesNotExist:
                 sub_obj = CurrentSubscription.objects.create(
                     customer=self,
-                    plan=plan_from_stripe_id(sub.plan.id),
+                    plan=Plan.plan_from_stripe_id(sub.plan.id),
                     current_period_start=convert_tstamp(
                         sub.current_period_start
                     ),
@@ -530,7 +533,7 @@ class Customer(StripeObject):
 
     def update_plan_quantity(self, quantity, charge_immediately=False):
         self.subscribe(
-            plan=plan_from_stripe_id(
+            plan=Plan.plan_from_stripe_id(
                 self.stripe_customer.subscription.plan.id
             ),
             quantity=quantity,
@@ -553,7 +556,8 @@ class Customer(StripeObject):
         if token:
             subscription_params["card"] = token
 
-        subscription_params["plan"] = PAYMENTS_PLANS[plan]["stripe_plan_id"]
+        #subscription_params["plan"] = PAYMENTS_PLANS[plan]["stripe_plan_id"]
+        subscription_params["plan"] = plan 
         subscription_params["quantity"] = quantity
         subscription_params["coupon"] = coupon
         resp = cu.update_subscription(**subscription_params)
@@ -569,8 +573,7 @@ class Customer(StripeObject):
         subscription_made.send(sender=self, plan=plan, stripe_response=resp)
         return resp
 
-    def charge(self, amount, currency="usd", description=None,
-               send_receipt=True):
+    def charge(self, amount, currency="usd", description=None):
         """
         This method expects `amount` to be a Decimal type representing a
         dollar amount. It will be converted to cents so any decimals beyond
@@ -587,8 +590,7 @@ class Customer(StripeObject):
             description=description,
         )
         obj = self.record_charge(resp["id"])
-        if send_receipt:
-            obj.send_receipt()
+        obj.send_receipt()
         return obj
 
     def record_charge(self, charge_id):
@@ -608,13 +610,13 @@ class CurrentSubscription(models.Model):
     start = models.DateTimeField()
     # trialing, active, past_due, canceled, or unpaid
     status = models.CharField(max_length=25)
-    cancel_at_period_end = models.BooleanField(default=False)
-    canceled_at = models.DateTimeField(blank=True, null=True)
-    current_period_end = models.DateTimeField(blank=True, null=True)
-    current_period_start = models.DateTimeField(blank=True, null=True)
-    ended_at = models.DateTimeField(blank=True, null=True)
-    trial_end = models.DateTimeField(blank=True, null=True)
-    trial_start = models.DateTimeField(blank=True, null=True)
+    cancel_at_period_end = models.BooleanField()
+    canceled_at = models.DateTimeField(null=True)
+    current_period_end = models.DateTimeField(null=True)
+    current_period_start = models.DateTimeField(null=True)
+    ended_at = models.DateTimeField(null=True)
+    trial_end = models.DateTimeField(null=True)
+    trial_start = models.DateTimeField(null=True)
     amount = models.DecimalField(decimal_places=2, max_digits=7)
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -623,7 +625,8 @@ class CurrentSubscription(models.Model):
         return self.amount * self.quantity
 
     def plan_display(self):
-        return PAYMENTS_PLANS[self.plan]["name"]
+        #return PAYMENTS_PLANS[self.plan]["name"]
+        return self.plan
 
     def status_display(self):
         return self.status.replace("_", " ").title()
@@ -662,8 +665,8 @@ class Invoice(models.Model):
     customer = models.ForeignKey(Customer, related_name="invoices")
     attempted = models.NullBooleanField()
     attempts = models.PositiveIntegerField(null=True)
-    closed = models.BooleanField(default=False)
-    paid = models.BooleanField(default=False)
+    closed = models.BooleanField()
+    paid = models.BooleanField()
     period_end = models.DateTimeField()
     period_start = models.DateTimeField()
     subtotal = models.DecimalField(decimal_places=2, max_digits=7)
@@ -729,7 +732,7 @@ class Invoice(models.Model):
             period_start = convert_tstamp(item["period"], "start")
 
             if item.get("plan"):
-                plan = plan_from_stripe_id(item["plan"]["id"])
+                plan = Plan.plan_from_stripe_id(item["plan"]["id"])
             else:
                 plan = ""
 
@@ -785,7 +788,7 @@ class InvoiceItem(models.Model):
     currency = models.CharField(max_length=10)
     period_start = models.DateTimeField()
     period_end = models.DateTimeField()
-    proration = models.BooleanField(default=False)
+    proration = models.BooleanField()
     line_type = models.CharField(max_length=50)
     description = models.CharField(max_length=200, blank=True)
     plan = models.CharField(max_length=100, blank=True)
@@ -881,3 +884,117 @@ class Charge(StripeObject):
             ).send()
             self.receipt_sent = num_sent > 0
             self.save()
+
+
+CURRENCY_OPTIONS = (
+    ('EUR', u'€'),
+    ('USD', '$'),
+)
+
+
+class Plan(models.Model):
+    INTERVAL_OPTIONS = (
+        ('month', _('monthly')),
+        ('year', _('yearly')),
+    )
+
+    name = models.CharField(_('name'), max_length=100)
+    stripe_plan_id = models.CharField(_('stripe plan id'), max_length=100)
+    description = models.TextField(_('description'), null=True, blank=True)
+    price = models.DecimalField(_('price'), max_digits=64, decimal_places=2)
+    currency = models.CharField(_('currency'), max_length=3, default='EUR',
+                                choices=CURRENCY_OPTIONS)
+    interval = models.CharField(_('interval'), max_length=10,
+                                default='month',
+                                choices=INTERVAL_OPTIONS) 
+    trail_period_days = models.IntegerField(_('trail period days'), null=True,
+                                            blank=True) 
+    if_on_stripe = models.BooleanField(_('if on stripe'), default=False)
+
+    class Meta:
+        verbose_name = _('plan')
+        verbose_name_plural = _('plans')
+        ordering = ('price', )
+
+    def __unicode__(self):
+        return u"%s (%s) - %s%s" % (self.name, self.get_interval_display(), 
+                                    self.get_currency_display(), self.price)
+
+    @classmethod
+    def plan_from_stripe_id(cls, stripe_id):
+        for plan in cls.objects.all():
+            if plan.stripe_plan_id == stripe_id:
+                return plan.name
+        return ''
+        """        
+        for key in PAYMENTS_PLANS.keys():
+            if PAYMENTS_PLANS[key].get("stripe_plan_id") == stripe_id:
+                return key
+        """
+
+    def update_or_create(self):
+        """
+        Update or Create plan on Stripe.
+        """
+        amount = int(100 * self.price)
+
+        try: 
+            stripe.Plan.create(
+                amount=amount,
+                interval=self.interval,
+                name=self.name,
+                currency=self.currency,
+                trial_period_days=self.trail_period_days,
+                id=self.stripe_plan_id
+            )
+            self.if_on_stripe = True 
+            self.save()
+            print "Plan created for {0}".format(self.name)
+        except stripe.InvalidRequestError, e: 
+            print "Plan already exists for {0}".format(self.name)
+            if not self.if_on_stripe:
+                self.if_on_stripe = True
+                self.save()
+
+
+class CreditBundle(models.Model):
+    """
+    Create Creadit Bundles 
+    """
+
+    name = models.CharField(_('credit bundle name'), max_length=100, unique=True, null=False)
+    slug = models.SlugField(unique=True, editable=False)
+    credits = models.PositiveIntegerField(_('number of credits'), default=10)
+    description = models.TextField(blank=True, null=True)
+    price = models.DecimalField(max_digits=64, decimal_places=2)
+    currency = models.CharField(max_length=3, default='EUR',
+                                choices=CURRENCY_OPTIONS)
+
+    class Meta:
+        verbose_name = _('credit bundle')
+        verbose_name_plural = _('credit bundles')
+        ordering = ('price', )
+
+    def __unicode__(self):
+        return u"%s - %s %s" % (self.name, self.price, self.get_currency_display())
+
+    """
+    def get_absolute_url(self):
+        return ('bundle_detail', (), dict(object_id=str(self.slug)))
+    """
+
+    def get_pricing_display(self):
+        return _('%(price).02f') % {'price': self.price}
+
+    def get_amount(self):
+        """
+        Get amount in cents for Stripe
+        """
+        if self.price:
+            return int(self.price * 100)
+        else:
+            return None
+    
+    def save(self, *args, **kwargs):
+        self.slug = uuslug(self.name, instance=self)
+        super(CreditBundle, self).save(*args, **kwargs)

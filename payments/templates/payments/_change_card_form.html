@@ -1,23 +1,86 @@
 {% load url from future %}
 
 <div class="change-card">
-    <h2>Current Card</h2>
-    <p class="lead">
-        {% if request.user.customer.card_kind and request.user.customer.card_last_4 %}
-            Current card on file is a <strong>{{ request.user.customer.card_kind }}</strong>
-            ending in the digits <strong>{{ request.user.customer.card_last_4 }}</strong>.
-        {% else %}
-            You do not currently have a card on file.
-        {% endif %}
-    </p>
     
     {% if error %}
         <div class="alert alert-error">{{ error }}</div>
     {% endif %}
     
-    <form action="{% url 'payments_ajax_change_card' %}" data-stripe-key="{{ STRIPE_PUBLIC_KEY }}" class="form ajax" data-replace-closest=".change-card" method="POST">
+    <form id="change-card" action="{% url 'payments_change_card' %}" data-stripe-key="{{ STRIPE_PUBLIC_KEY }}" class="form" method="POST">
         {% csrf_token %}
         <input name="stripe_token" type="hidden" />
-        <a href="" class="btn btn-primary change-card">{% if request.user.customer.card_kind %}Change{% else %}Add{% endif %} Card</a>
+        <span class="errors"></span>
+
+        <div class="control-group">
+          <label class="control-label">Card Number</label>
+          <div class="controls">
+            <input type="text" size="20" data-stripe="number"/>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">
+            <span>CVC</span>
+          </label>
+          <div class="controls">
+            <input type="text" size="4" data-stripe="cvc"/>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">
+            <span>Expiration (MM/YYYY)</span>
+          </label>
+          <div class="controls">
+            <input type="text" size="2" data-stripe="exp-month"/>
+            <span> / </span>
+            <input type="text" size="4" data-stripe="exp-year"/>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Change</button>
+
+        {# <button type="submit" class="btn btn-primary change-card">{% if request.user.customer.card_kind %}Change{% else %}Add{% endif %} Card</button> #}
     </form>
 </div>
+
+{% block extra_js %}
+    <script type="text/javascript" src="https://js.stripe.com/v2/"></script>
+    <script type="text/javascript">
+        // This identifies your website in the createToken call below
+        Stripe.setPublishableKey('{{ STRIPE_PUBLIC_KEY }}');
+
+        var stripeResponseHandler = function(status, response) {
+          var $form = $('#change-card');
+
+          if (response.error) {
+            // Show the errors on the form
+            $form.find('.errors').text(response.error.message);
+            $form.find('button').prop('disabled', false);
+          } else {
+            // token contains id, last4, and card type
+            var token = response.id;
+            // Insert the token into the form so it gets submitted to the server
+            $form.append($('<input type="hidden" name="stripe_token" />').val(token));
+            // And submit -> no ajax this time.
+            $form.get(0).submit();
+          }
+        };
+
+        jQuery(function($) {
+          $('#change-card').submit(function(event) {
+            event.preventDefault();
+            console.log('stripe card form');
+            var $form = $(this);
+
+            // Disable the submit button to prevent repeated clicks
+            $form.find('button').prop('disabled', true);
+
+            Stripe.card.createToken($form, stripeResponseHandler);
+
+            // Prevent the form from submitting with the default action
+            return false;
+          });
+        });
+    </script>
+{% endblock extra_js %}

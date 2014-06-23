@@ -1,0 +1,66 @@
+{% extends "payments/base.html" %}
+{% load bootstrap_tags i18n %}
+
+{% block body_id %}shop{% endblock %}
+
+{# {% block title %}Purchase Credits{% endblock title %} #}
+
+{% block main %}
+    <div class="row">
+        <div class="span12">
+            <h2>You have {{ user.get_profile.credits }} credits.</h2>
+            <p>select the following bundles to add more credits.</p>
+            {% if error %}
+                <div class="alert alert-error">{{ error }}</div>
+            {% endif %}
+            {% if request.user.customer.card_kind and request.user.customer.card_last_4 %}
+                <p>
+                    Current card on file is a <strong>{{ request.user.customer.card_kind }}</strong>
+                    ending in the digits <strong>{{ request.user.customer.card_last_4 }}</strong>.
+                    <a class="btn btn-primary" href="{% url 'payments_change_card' %}">{% trans "Change card" %}</a>
+                </p>
+            {% endif %}
+            <hr>
+        </div>
+    </div>
+    <div class="row">
+    {% for bundle in bundles  %}
+        <div class="span4"> 
+            <div class="panel">
+                <div class="body panel-padding">
+                    {{ bundle.name }} ({{ bundle.get_currency_display }}{{ bundle.get_pricing_display}})<br>
+                    <a class="btn btn-primary" href='{% url "payments_credit_purchase" bundle.slug %}'>{% trans "Purchase" %}</a>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+{% endblock %}
+
+{% comment %}
+    
+{% block extra_js %}
+<script src="//checkout.stripe.com/v2/checkout.js"></script>
+<script>
+    $(function() {
+        $('.purchase-button').on("click", function(e) {
+          e.preventDefault();
+          var $form = $(this).closest("form"),
+              token = function(res) {
+                $form.find("input[name=stripe_token]").val(res.id);
+                $form.trigger("submit");
+              };
+
+          StripeCheckout.open({
+            key:         $form.data("stripe-key"),
+            name:        'Payment Method',
+            panelLabel:  'Add Payment Method',
+            token:       token
+          });
+
+          return false;
+        });
+    });
+</script>
+{% endblock %}
+{% endcomment %}

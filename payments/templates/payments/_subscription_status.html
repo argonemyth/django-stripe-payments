@@ -3,7 +3,8 @@
         {% if subscription.cancel_at_period_end %}
             {% if subscription.status == "active" %}
                 <div class="alert alert-warning lead">
-                    Your subscription has been <strong>canceled</strong> but you can continue to use the site for another <strong>{{ subscription.current_period_end|timeuntil }}</strong>.
+                    {# Your subscription has been <strong>canceled</strong> but you can continue to use the site for another <strong>{{ subscription.current_period_end|timeuntil }}</strong>. #}
+                    Your subscription {{ subscription.plan }} has been <strong>canceled</strong>, we will switch you on the free plan on <strong>{{ subscription.current_period_end }}</strong>.
                 </div>
             {% endif %}
             {% if subscription.status == "trialing" %}
@@ -31,7 +32,7 @@
                     {% if subscription.status == "canceled" %}
                         {% if subscription.is_period_current %}
                             <div class="alert alert-warning lead">
-                                Your subscription has been <strong>canceled</strong> but you can continue to use the site for another <strong>{{ subscription.current_period_end|timeuntil }}</strong>.
+                                Your subscription {{ subscription.plan }} has been <strong>canceled</strong>, we will switch you on the free plan on <strong>{{ subscription.current_period_end }}</strong>.
                             </div>
                         {% else %}
                             <div class="alert alert-danger lead">

@@ -9,7 +9,9 @@ from .models import (
     EventProcessingException,
     Invoice,
     InvoiceItem,
-    Transfer
+    Transfer,
+    Plan,
+    CreditBundle
 )
 from .utils import get_user_model
 
@@ -149,9 +151,6 @@ admin.site.register(
         "traceback",
         "data"
     ],
-    raw_id_fields=[
-        "event"
-    ],
 )
 
 admin.site.register(
@@ -285,3 +284,27 @@ admin.site.register(
         "event__stripe_id"
     ]
 )
+
+
+admin.site.register(
+    Plan,
+    list_display=[
+        "__unicode__",
+        "name",
+        "stripe_plan_id",
+        "price",
+        "interval",
+        "if_on_stripe"
+    ],
+    list_filter=[
+        "interval",
+        "if_on_stripe"
+    ],
+    search_fields=[
+        "name",
+        "stripe_plan_id",
+        "description"
+    ]
+)
+
+admin.site.register(CreditBundle)
